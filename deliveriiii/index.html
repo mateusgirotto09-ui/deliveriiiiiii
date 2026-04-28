@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lancheria do Mateus</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #1a1a2e, #16213e); min-height: 100vh; padding-bottom: 100px; }
+        header { background: linear-gradient(135deg, #e74c3c, #c0392b); color: white; padding: 20px; text-align: center; border-radius: 0 0 30px 30px; }
+        header h1 { font-size: 2em; }
+        .status-badge { display: inline-block; background: #27ae60; padding: 8px 20px; border-radius: 25px; margin-top: 10px; }
+        .abas { display: flex; gap: 10px; padding: 15px; justify-content: center; }
+        .aba-btn { padding: 12px 30px; border: 2px solid #e74c3c; background: white; border-radius: 30px; cursor: pointer; font-weight: bold; color: #e74c3c; }
+        .aba-btn.ativa { background: #e74c3c; color: white; }
+        .categorias { display: flex; gap: 10px; padding: 15px; overflow-x: auto; justify-content: center; flex-wrap: wrap; }
+        .cat-btn { padding: 10px 20px; border: 2px solid #e74c3c; background: white; border-radius: 25px; cursor: pointer; font-weight: bold; color: #e74c3c; }
+        .cat-btn.ativa { background: #e74c3c; color: white; }
+        .produtos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; padding: 20px; }
+        .produto-card { background: white; border-radius: 15px; padding: 20px; cursor: pointer; transition: transform 0.2s; }
+        .produto-card:hover { transform: translateY(-5px); }
+        .produto-card h3 { color: #1a1a2e; }
+        .preco { font-size: 2em; color: #27ae60; font-weight: bold; }
+        .btn-add { background: #e74c3c; color: white; border: none; padding: 10px 25px; border-radius: 25px; cursor: pointer; font-weight: bold; margin-top: 10px; }
+        .carrinho-float { position: fixed; bottom: 20px; left: 20px; right: 20px; background: white; border-radius: 25px; padding: 15px 25px; box-shadow: 0 -5px 30px rgba(0,0,0,0.3); display: flex; justify-content: space-between; align-items: center; z-index: 100; }
+        .btn-finalizar { background: #27ae60; color: white; border: none; padding: 15px 35px; border-radius: 30px; font-weight: bold; cursor: pointer; font-size: 1.1em; }
+        .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center; }
+        .modal.ativo { display: flex; }
+        .modal-conteudo { background: white; border-radius: 20px; padding: 30px; width: 95%; max-width: 500px; max-height: 85vh; overflow-y: auto; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 10px; font-size: 1em; }
+        .btn-whatsapp { background: #25D366; color: white; border: none; padding: 15px; border-radius: 10px; width: 100%; font-size: 1.1em; font-weight: bold; cursor: pointer; }
+        .status-card { background: white; border-radius: 20px; padding: 30px; margin: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        .timeline { position: relative; padding-left: 30px; }
+        .timeline::before { content: ''; position: absolute; left: 15px; top: 0; bottom: 0; width: 3px; background: #ddd; border-radius: 2px; }
+        .step { position: relative; margin-bottom: 20px; }
+        .step-icon { position: absolute; left: -30px; width: 33px; height: 33px; border-radius: 50%; background: #ddd; display: flex; align-items: center; justify-content: center; font-size: 16px; z-index: 1; }
+        .step.concluido .step-icon { background: #27ae60; }
+        .step.atual .step-icon { background: #f39c12; animation: pulse-step 2s infinite; }
+        @keyframes pulse-step { 0%,100%{box-shadow:0 0 0 0 rgba(243,156,18,0.4)}50%{box-shadow:0 0 0 10px rgba(243,156,18,0)} }
+        .step-texto { font-weight: bold; color: #999; }
+        .step.concluido .step-texto { color: #27ae60; }
+        .step.atual .step-texto { color: #f39c12; }
+        .divider { border-top: 2px dashed #eee; margin: 20px 0; }
+        .info-row { display: flex; justify-content: space-between; padding: 8px 0; color: #666; }
+        .info-row.total { font-size: 1.3em; font-weight: bold; color: #27ae60; border-top: 1px solid #eee; padding-top: 10px; }
+        .previsao { background: #ffeaa7; border-radius: 10px; padding: 15px; text-align: center; margin: 20px 0; font-weight: bold; color: #d63031; }
+        .busca-pedido { display: flex; gap: 10px; margin-bottom: 20px; }
+        .busca-pedido input { flex: 1; padding: 12px; border: 2px solid #ddd; border-radius: 10px; font-size: 1em; }
+        .busca-pedido button { background: #e74c3c; color: white; border: none; padding: 12px 20px; border-radius: 10px; cursor: pointer; font-weight: bold; }
+        .pedido-item { background: white; border-left: 5px solid #f39c12; padding: 15px; margin: 10px 0; border-radius: 10px; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .campo-obrigatorio { color: #e74c3c; font-size: 0.8em; }
+        .btn-fechar-pedido { display: block; margin: 20px auto 0; background: #1a1a2e; color: white; border: none; padding: 10px 30px; border-radius: 25px; cursor: pointer; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>🍔 Lancheria do Mateus</h1>
+        <div class="status-badge">ABERTO AGORA</div>
+    </header>
+
+    <div class="abas">
+        <button class="aba-btn ativa" onclick="trocarAba('cardapio', this)">📋 Cardápio</button>
+        <button class="aba-btn" onclick="trocarAba('pedidos', this)">📦 Meus Pedidos</button>
+    </div>
+
+    <div id="abaCardapio">
+        <div class="categorias" id="categorias"></div>
+        <div class="produtos-grid" id="produtos"></div>
+    </div>
+
+    <div id="abaPedidos" style="display:none;">
+        <div class="status-card" id="statusCardPedidos">
+            <h2 style="text-align:center;">📦 Meus Pedidos</h2>
+            <div class="busca-pedido">
+                <input type="tel" id="buscaTelefone" placeholder="Seu WhatsApp (com DDD)">
+                <button onclick="buscarMeusPedidos()">🔍 Ver pedidos</button>
+            </div>
+            <div id="listaPedidos"></div>
+            <button class="btn-fechar-pedido" id="btnVoltarPedidos" style="display:none;" onclick="buscarMeusPedidos()">⬅ Voltar para lista</button>
+        </div>
+    </div>
+
+    <div class="carrinho-float" id="carrinhoFloat" style="display:none;">
+        <div>
+            <span id="qtdItens">0 itens</span><br>
+            <strong style="font-size:1.3em;">R$ <span id="totalCarrinho">0.00</span></strong>
+        </div>
+        <button class="btn-finalizar" onclick="abrirFinalizacao()">Finalizar 🛒</button>
+    </div>
+
+    <div class="modal" id="modalFinalizacao">
+        <div class="modal-conteudo">
+            <h2>Seu Pedido</h2>
+            <button class="btn-fechar" onclick="fecharModal()" style="float:right;background:#e74c3c;color:white;border:none;width:30px;height:30px;border-radius:50%;cursor:pointer;font-size:1.2em;">✕</button>
+            <div id="resumoPedido"></div>
+            <div class="form-group"><label>👤 Nome *</label><input type="text" id="clienteNome"></div>
+            <div class="form-group" style="border:1px solid #e74c3c;padding:10px;border-radius:10px;background:#fff5f5;">
+                <label>📱 WhatsApp * <span class="campo-obrigatorio">OBRIGATÓRIO</span></label>
+                <input type="tel" id="clienteTelefone" required>
+            </div>
+            <div class="form-group"><label>📍 Endereço de Entrega</label><input type="text" id="endereco"></div>
+            <div class="form-group">
+                <label>💳 Forma de Pagamento</label>
+                <select id="formaPagamento" onchange="mostrarCampoDinheiro()">
+                    <option value="Pix">📱 Pix</option>
+                    <option value="Dinheiro">💵 Dinheiro</option>
+                    <option value="Cartao">💳 Cartão</option>
+                </select>
+            </div>
+            <div class="form-group" id="grupoDinheiro" style="display:none;"><label>💵 Valor em Dinheiro</label><input type="number" id="valorDinheiro" placeholder="Ex: 100.00" step="0.01"></div>
+            <div class="form-group" style="background:#f8f9fa;padding:10px;border-radius:10px;">
+                <label>🚗 Taxa de Entrega</label>
+                <p style="font-size:1.2em;font-weight:bold;color:#e74c3c;">R$ <span id="taxaEntrega">0.00</span></p>
+            </div>
+            <div class="form-group"><label>📝 Obs</label><textarea id="observacao" rows="2"></textarea></div>
+            <button class="btn-whatsapp" onclick="enviarPedido()">📱 Enviar via WhatsApp</button>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyASjRZr6c3QdN83mhbOjDdsw5gP5WsgW0g",
+            authDomain: "delivery-pro-28192.firebaseapp.com",
+            projectId: "delivery-pro-28192",
+            storageBucket: "delivery-pro-28192.firebasestorage.app",
+            messagingSenderId: "166377858689",
+            appId: "1:166377858689:web:0dfa3cd3f5abbeb83b0f80"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        let produtos = [], carrinho = [], taxaEntrega = 0, numerosPedidos = {};
+
+        // Carrega numeração dos pedidos
+        async function carregarNumeros() {
+            const snap = await db.collection('pedidos').orderBy('data', 'asc').get();
+            let num = 1;
+            snap.forEach(doc => { numerosPedidos[doc.id] = num; num++; });
+        }
+
+        function trocarAba(aba, btn) {
+            document.querySelectorAll('.aba-btn').forEach(b => b.classList.remove('ativa'));
+            btn.classList.add('ativa');
+            document.getElementById('abaCardapio').style.display = aba === 'cardapio' ? 'block' : 'none';
+            document.getElementById('abaPedidos').style.display = aba === 'pedidos' ? 'block' : 'none';
+        }
+
+        async function buscarMeusPedidos() {
+            const tel = document.getElementById('buscaTelefone').value.replace(/\D/g, '');
+            if (!tel || tel.length < 10) { alert('Digite seu WhatsApp com DDD!'); return; }
+            const snap = await db.collection('pedidos').where('telefone', '==', tel).get();
+            if (snap.empty) { document.getElementById('listaPedidos').innerHTML = '<p style="text-align:center;color:#999;padding:30px;">Nenhum pedido encontrado</p>'; return; }
+            const pedidos = []; snap.forEach(doc => pedidos.push({ id: doc.id, numero: numerosPedidos[doc.id] || doc.id.slice(-4), ...doc.data() }));
+            pedidos.sort((a, b) => new Date(b.data) - new Date(a.data));
+            document.getElementById('btnVoltarPedidos').style.display = 'none';
+            let html = `<h3 style="margin:15px 0;">📋 Seus Pedidos (${pedidos.length})</h3>`;
+            pedidos.forEach(p => {
+                const emoji = { pendente: '🆕', preparando: '🍳', pronto: '✅', entregue: '🏁', cancelado: '❌', venda_direta: '💰' };
+                html += `<div class="pedido-item" onclick="verStatus('${p.id}')">
+                    <strong>${emoji[p.status]} Pedido #${p.numero}</strong> - R$ ${(p.total||0).toFixed(2)}
+                    <br><small>${p.data} • ${p.status}</small></div>`;
+            });
+            document.getElementById('listaPedidos').innerHTML = html;
+        }
+
+        async function verStatus(id) {
+            const doc = await db.collection('pedidos').doc(id).get();
+            const p = { id: doc.id, numero: numerosPedidos[doc.id] || doc.id.slice(-4), ...doc.data() };
+            const sts = ['pendente', 'preparando', 'pronto', 'entregue', 'cancelado'];
+            const idx = sts.indexOf(p.status);
+            document.getElementById('btnVoltarPedidos').style.display = 'block';
+            let html = `<h3 style="text-align:center;">🍔 Pedido #${p.numero}</h3><p style="text-align:center;color:#999;">${p.data}</p>`;
+            if (p.status === 'cancelado') {
+                html += '<div style="text-align:center;color:#e74c3c;font-weight:bold;">❌ Cancelado</div>';
+            } else {
+                const steps = [{ icon: '✅', label: 'Confirmado' },{ icon: '🍳', label: 'Preparando' },{ icon: '📦', label: 'Pronto' },{ icon: '🏁', label: 'Finalizado' }];
+                html += '<div class="timeline">';
+                steps.forEach((s, i) => { let cls = i < idx ? 'concluido' : i === idx ? 'atual' : ''; html += `<div class="step ${cls}"><div class="step-icon">${s.icon}</div><div class="step-texto">${s.label}</div></div>`; });
+                html += '</div>';
+                if (idx < 3) html += `<div class="previsao">🚗 Previsão: <strong>${['30-40 min','15-25 min','5-10 min'][idx]}</strong></div>`;
+            }
+            html += '<div class="divider"></div>';
+            (p.itens||[]).forEach(i => html += `<div class="info-row">📋 ${i.quantidade}x ${i.nome}</div>`);
+            html += `<div class="info-row total">💰 Total: R$ ${(p.total||0).toFixed(2)}</div>`;
+            html += `<div class="info-row">💳 Pagamento: ${p.pagamento||'--'}</div>`;
+            document.getElementById('listaPedidos').innerHTML = html;
+        }
+
+        async function carregarConfig() { const doc = await db.collection('config').doc('loja').get(); if (doc.exists) { taxaEntrega = doc.data().taxa_entrega || 0; document.getElementById('taxaEntrega').textContent = taxaEntrega.toFixed(2); } }
+        async function carregarProdutos() {
+            const snap = await db.collection('produtos').get(); produtos = []; snap.forEach(doc => produtos.push({ id: doc.id, ...doc.data() }));
+            if (produtos.length === 0) { document.getElementById('produtos').innerHTML = '<div style="color:white;text-align:center;padding:50px;"><h2>Nenhum produto</h2></div>'; return; }
+            renderizarCategorias(); renderizarProdutos();
+        }
+        function renderizarCategorias() { const cats = [...new Set(produtos.map(p => p.categoria))]; document.getElementById('categorias').innerHTML = '<button class="cat-btn ativa" onclick="filtrar(\'todos\',this)">Todos</button>' + cats.map(c => `<button class="cat-btn" onclick="filtrar('${c}',this)">${c}</button>`).join(''); }
+        function filtrar(cat, btn) { document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('ativa')); btn.classList.add('ativa'); renderizarProdutos(cat === 'todos' ? produtos : produtos.filter(p => p.categoria === cat)); }
+        function renderizarProdutos(lista = produtos) { document.getElementById('produtos').innerHTML = lista.map(p => `<div class="produto-card"><h3>${p.nome}</h3><p style="color:#666;">${p.categoria}</p><p class="preco">R$ ${(p.preco||0).toFixed(2)}</p><button class="btn-add" onclick="addCarrinho('${p.id}','${p.nome}',${p.preco||0})">+ Adicionar</button></div>`).join(''); }
+        function addCarrinho(id, nome, preco) { const item = carrinho.find(i => i.id === id); if (item) item.quantidade++; else carrinho.push({id, nome, preco, quantidade:1}); atualizarCarrinho(); }
+        function atualizarCarrinho() { const q = carrinho.reduce((s,i) => s+i.quantidade,0), t = carrinho.reduce((s,i) => s+(i.preco*i.quantidade),0); document.getElementById('qtdItens').textContent = q + ' itens'; document.getElementById('totalCarrinho').textContent = t.toFixed(2); document.getElementById('carrinhoFloat').style.display = q > 0 ? 'flex' : 'none'; }
+        function mostrarCampoDinheiro() { document.getElementById('grupoDinheiro').style.display = document.getElementById('formaPagamento').value === 'Dinheiro' ? 'block' : 'none'; }
+        function abrirFinalizacao() { document.getElementById('resumoPedido').innerHTML = carrinho.map(i => `<p>${i.quantidade}x ${i.nome} - R$ ${(i.preco*i.quantidade).toFixed(2)}</p>`).join(''); document.getElementById('modalFinalizacao').classList.add('ativo'); }
+        function fecharModal() { document.getElementById('modalFinalizacao').classList.remove('ativo'); }
+        async function enviarPedido() {
+            const nome = document.getElementById('clienteNome').value;
+            const tel = document.getElementById('clienteTelefone').value.replace(/\D/g, '');
+            if (!tel || tel.length < 10) { alert('WhatsApp obrigatório!'); return; }
+            const pag = document.getElementById('formaPagamento').value;
+            const end = document.getElementById('endereco').value;
+            const vd = document.getElementById('valorDinheiro').value;
+            const subtotal = carrinho.reduce((s,i) => s+(i.preco*i.quantidade),0);
+            const total = subtotal + taxaEntrega;
+            let obs = document.getElementById('observacao').value;
+            if (end) obs = '📍' + end + (obs ? ' | ' + obs : '');
+            if (pag === 'Dinheiro' && vd) { const troco = parseFloat(vd) - total; obs += (obs ? ' | ' : '') + '💵Troco: R$' + troco.toFixed(2); }
+            const pedido = { cliente: nome || 'Balcão', telefone: tel, endereco: end, pagamento: pag, observacao: obs, itens: carrinho, subtotal, taxa_entrega: taxaEntrega, total, valor_dinheiro: vd, status: 'pendente', data: new Date().toLocaleString('pt-BR') };
+            const docRef = await db.collection('pedidos').add(pedido);
+            // Atualiza numeração
+            const snap = await db.collection('pedidos').orderBy('data', 'asc').get();
+            let num = 1; snap.forEach(doc => { numerosPedidos[doc.id] = num; num++; });
+            let msg = `🍔 *PEDIDO #${numerosPedidos[docRef.id] || docRef.id.slice(-4)}*\n👤 ${pedido.cliente}\n📱 ${tel}\n📍 ${end}\n💰 Subtotal: R$ ${subtotal.toFixed(2)}\n🚗 Taxa: R$ ${taxaEntrega.toFixed(2)}\n💵 TOTAL: R$ ${total.toFixed(2)}\n💳 ${pag}`;
+            if (pag === 'Dinheiro' && vd) { const troco = parseFloat(vd) - total; msg += `\n💵 Valor: R$ ${parseFloat(vd).toFixed(2)}\n💲 Troco: R$ ${troco.toFixed(2)}`; }
+            window.open(`https://wa.me/5551991730171?text=${encodeURIComponent(msg)}`, '_blank');
+            // Baixa no estoque
+for (const item of carrinho) {
+    const prodDoc = await db.collection('produtos').doc(item.id).get();
+    const atual = prodDoc.data().estoque || 0;
+    await db.collection('produtos').doc(item.id).update({ estoque: atual - item.quantidade });
+}
+            carrinho = []; atualizarCarrinho(); fecharModal();
+            alert('✅ Pedido #' + (numerosPedidos[docRef.id] || docRef.id.slice(-4)) + ' enviado!\nAcompanhe em: Meus Pedidos');
+        }
+
+        carregarNumeros(); carregarConfig(); carregarProdutos();
+    </script>
+</body>
+</html>
